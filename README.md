@@ -1,13 +1,16 @@
 # GitHub Calendar Connector
 
-GitHubのコントリビューション（草）を、Googleカレンダー等に同期するためのスタータープロジェクトです。
+GitHubのコントリビューション（草）をGoogleカレンダーに同期するAPIです。
 
-## 現在の実装（MVP）
+## 実装済み機能
 
-- FastAPIベースのAPIサーバー
-- コントリビューション件数を5段階にレベル化
-- レベルに応じてGoogle Calendar `colorId` を割り当て
-- 同期処理の土台（スタブ実装）
+- `POST /sync` で指定期間の日別コントリビューションを取得
+- GitHub GraphQL API (`contributionsCollection`) 連携
+- Google Calendar API 連携（`externalId` でupsert）
+- コントリビューション件数に応じた `colorId` 付与
+- `dry_run` で書き込みなしの差分確認
+- 上流API障害時に `502 Bad Gateway` を返す明示的エラーハンドリング
+- ユニットテスト（設定検証・モデル検証・色マッピング・同期ロジック）
 
 ## セットアップ
 
@@ -15,6 +18,14 @@ GitHubのコントリビューション（草）を、Googleカレンダー等�
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+```bash
+export GITHUB_TOKEN=ghp_xxx
+export GOOGLE_ACCESS_TOKEN=ya29.xxx
+```
+
+```bash
 uvicorn app.main:app --reload
 ```
 
@@ -24,9 +35,7 @@ uvicorn app.main:app --reload
 ヘルスチェック。
 
 ### `POST /sync`
-指定ユーザーの指定期間のコントリビューションを同期する（現状はスタブ）。
-
-リクエスト例:
+リクエスト:
 
 ```json
 {
@@ -34,13 +43,31 @@ uvicorn app.main:app --reload
   "calendar_id": "primary",
   "start_date": "2026-01-01",
   "end_date": "2026-01-31",
-  "show_zero_days": true
+  "show_zero_days": true,
+  "dry_run": false
 }
 ```
 
-## 次の実装候補
+レスポンス:
 
-1. GitHub OAuth + GraphQL `contributionsCollection` 本実装
-2. Google OAuth + Calendar Events insert/upsert 本実装
-3. externalId (`github:{username}:{date}`) で重複防止
-4. 定期実行（Cloud Scheduler / cron）
+```json
+{
+  "synced_events": 31,
+  "skipped_days": 5,
+  "created_events": 20,
+  "updated_events": 11,
+  "dry_run": false
+}
+```
+
+## エラーコード
+
+- `400`: バリデーションエラー（例: 日付範囲不正）
+- `500`: 必須環境変数不足
+- `502`: GitHub/Google 上流APIエラー
+
+## テスト
+
+```bash
+pytest -q
+```
